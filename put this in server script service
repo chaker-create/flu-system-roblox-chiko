@@ -1,0 +1,121 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local GAMEPASS_ID = 123456789 -- بدلها بالـ ID متاعك
+local OWNER_ID = 111111111 -- حط ID متاعك
+
+local tempFly = {}
+local permFly = {}
+
+-- تحقق إذا اللاعب عندو الحق
+local function hasAccess(player)
+	if player.UserId == OWNER_ID then
+		return true
+	end
+	
+	if permFly[player.UserId] then
+		return true
+	end
+	
+	if tempFly[player.UserId] then
+		return true
+	end
+	
+	local success, owns = pcall(function()
+		return MarketplaceService:UserOwnsGamePassAsync(player.UserId, GAMEPASS_ID)
+	end)
+	
+	return success and owns
+end
+
+-- Fly System
+local function enableFly(player)
+	local char = player.Character
+	if not char then return end
+	
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	if hrp:FindFirstChild("BodyVelocity") then return end
+	
+	local bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+	bv.Velocity = Vector3.zero
+	bv.Parent = hrp
+	
+	local bg = Instance.new("BodyGyro")
+	bg.MaxTorque = Vector3.new(1e5,1e5,1e5)
+	bg.CFrame = hrp.CFrame
+	bg.Parent = hrp
+	
+	-- noclip
+	for _,v in pairs(char:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.CanCollide = false
+		end
+	end
+end
+
+local function disableFly(player)
+	local char = player.Character
+	if not char then return end
+	
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		for _,v in pairs(hrp:GetChildren()) do
+			if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
+				v:Destroy()
+			end
+		end
+	end
+	
+	for _,v in pairs(char:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.CanCollide = true
+		end
+	end
+end
+
+-- RemoteEvent
+local remote = Instance.new("RemoteEvent", game.ReplicatedStorage)
+remote.Name = "FlyEvent"
+
+remote.OnServerEvent:Connect(function(player)
+	if hasAccess(player) then
+		enableFly(player)
+	end
+end)
+
+-- Commands
+Players.PlayerAdded:Connect(function(player)
+	player.Chatted:Connect(function(msg)
+		if player.UserId ~= OWNER_ID then return end
+		
+		local args = string.split(msg, " ")
+		
+		if args[1] == "/fly" then
+			for _,plr in pairs(Players:GetPlayers()) do
+				if string.lower(plr.Name) == string.lower(args[2]) then
+					tempFly[plr.UserId] = true
+				end
+			end
+			
+		elseif args[1] == "/permfly" then
+			for _,plr in pairs(Players:GetPlayers()) do
+				if string.lower(plr.Name) == string.lower(args[2]) then
+					permFly[plr.UserId] = true
+				end
+			end
+			
+		elseif args[1] == "/delfly" then
+			for _,plr in pairs(Players:GetPlayers()) do
+				if string.lower(plr.Name) == string.lower(args[2]) then
+					permFly[plr.UserId] = nil
+					tempFly[plr.UserId] = nil
+					disableFly(plr)
+				end
+			end
+		end
+	end)
+end)
